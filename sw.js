@@ -1,11 +1,11 @@
 /* Service worker: aplikacja działa bez internetu.
    Zmieniając pliki aplikacji, podnieś numer wersji poniżej, żeby telefon pobrał nowe pliki. */
-var VERSION = 'espe-v1';
+var VERSION = 'espe-v2';
 var FILES = [
   './', 'index.html', 'manifest.webmanifest', 'pdf.js',
-  'assets/logo.png', 'assets/circle.png', 'assets/book.png',
-  'fonts/Carlito-Regular.subset.ttf', 'fonts/Carlito-Bold.subset.ttf',
-  'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png'
+  'logo.png', 'circle.png', 'book.png',
+  'Carlito-Regular.subset.ttf', 'Carlito-Bold.subset.ttf',
+  'icon-192.png', 'icon-512.png', 'maskable-512.png'
 ];
 
 self.addEventListener('install', function (e) {

@@ -280,12 +280,12 @@
         } catch (e) { res(null); }
       };
       im.onerror = function () { res(null); };
-      im.src = 'assets/logo.png';
+      im.src = 'logo.png';
     });
   }
   function load() {
     if (!assets) {
-      assets = Promise.all([getBuf('fonts/Carlito-Regular.subset.ttf'), getBuf('fonts/Carlito-Bold.subset.ttf'), loadLogo()])
+      assets = Promise.all([getBuf('Carlito-Regular.subset.ttf'), getBuf('Carlito-Bold.subset.ttf'), loadLogo()])
         .then(function (a) { return { fr: a[0], fb: a[1], logo: a[2] }; })
         .catch(function (e) { assets = null; throw e; });
     }
