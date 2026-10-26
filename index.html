@@ -91,13 +91,6 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 :root[data-theme="dark"] .wm{color:#E58A8C}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .wm{color:#E58A8C}}
 .chev{font-size:18px;width:16px;text-align:center}
-.bar{height:10px;border-radius:5px;background:var(--line);margin-top:12px;overflow:hidden}
-.bar b{display:block;height:100%;border-radius:5px;background:var(--wine)}
-.bar b.ok{background:var(--ok)}
-.goal{margin-top:6px;font-weight:700;font-size:14px;color:var(--wine)}
-.goal.ok{color:var(--ok)}
-:root[data-theme="dark"] .goal:not(.ok){color:#E58A8C}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .goal:not(.ok){color:#E58A8C}}
 .days{margin-top:10px}
 .day{border-top:1px solid var(--line)}
 .dh{width:100%;display:flex;justify-content:space-between;gap:10px;padding:12px 0;font-weight:700;text-align:left}
@@ -147,6 +140,17 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 :root[data-theme="dark"] .caltoday{color:var(--sky)}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .caltoday{color:var(--sky)}}
 .week.sel{border-color:var(--wine);box-shadow:0 0 0 1px var(--wine)}
+.addbtn{display:block;width:100%;margin-bottom:14px;background:var(--wine);color:var(--onwine);border-radius:16px;padding:14px;font-weight:800;font-size:16px;letter-spacing:.03em}
+.addbtn:hover{filter:brightness(1.1)}
+.bar{height:10px;border-radius:5px;background:var(--line);margin-top:12px;overflow:hidden}
+.bar b{display:block;height:100%;border-radius:5px;background:var(--wine)}
+.bar b.ok{background:var(--ok)}
+.goal{margin-top:6px;font-weight:700;font-size:14px;color:var(--wine)}
+.goal.ok{color:var(--ok)}
+:root[data-theme="dark"] .goal:not(.ok){color:#E58A8C}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .goal:not(.ok){color:#E58A8C}}
+.cd.pick{box-shadow:inset 0 0 0 2px var(--wine)}
+.wk.sel .cd.has.pick{box-shadow:inset 0 0 0 2px var(--onwine)}
 
 /* ---------- Modale ---------- */
 .scrim{position:fixed;inset:0;background:var(--scrim);display:grid;place-items:center;
@@ -283,7 +287,6 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
     });
     return Object.keys(wk).map(function(k){var w=wk[k];w.dayList=Object.keys(w.days).map(function(x){var d=w.days[x];d.list.sort(function(a,b){return sStart(a)-sStart(b)});return d}).sort(function(a,b){return b.ds-a.ds});return w}).sort(function(a,b){return b.ws-a.ws});
   }
-  function goal(ms){var d=GOAL-ms,p=Math.min(1,ms/GOAL);if(d>0)return{ok:false,p:p,label:'Brakuje '+dur(d)+' do celu'};if(d===0)return{ok:true,p:1,label:'Cel osiągnięty dokładnie'};return{ok:true,p:1,label:'Cel przekroczony o '+dur(-d)}}
 
   /* ---------- widoki ---------- */
   var $=function(id){return document.getElementById(id)};
@@ -305,7 +308,8 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
   document.addEventListener('visibilitychange',function(){if(!document.hidden)renderT()});
 
   /* ---------- statystyki ---------- */
-  var openW={},openD={},firstRender=true,selW=dkey(sow(Date.now())),n0=new Date(),calY=n0.getFullYear(),calM=n0.getMonth();
+  var openW={},openD={},firstRender=true,selDay=null,selW=dkey(sow(Date.now())),n0=new Date(),calY=n0.getFullYear(),calM=n0.getMonth();
+  function goal(ms){var d=GOAL-ms,p=Math.min(1,ms/GOAL);if(d>0)return{ok:false,p:p,label:'Brakuje '+dur(d)+' do celu'};if(d===0)return{ok:true,p:1,label:'Cel osiągnięty dokładnie'};return{ok:true,p:1,label:'Cel przekroczony o '+dur(-d)}}
   function renderS(){
     var weeks=group();
     if(firstRender&&weeks.length){var cur=weeks.filter(function(w){return w.ws===sow(Date.now())})[0]||weeks[0];openW[cur.key]=1;if(cur.dayList[0])openD[cur.dayList[0].key]=1}
@@ -353,7 +357,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
       for(var i=0;i<7;i++){
         var d=new Date(ws);d.setDate(d.getDate()+i);
         var dk=dkey(d.getTime());
-        cells+='<button class="cd'+(d.getMonth()!==calM?' out':'')+(byDay[dk]?' has':'')+(dk===todayK?' today':'')+'" data-cd="'+dk+'" aria-label="'+dayLabel(d.getTime())+(byDay[dk]?', '+dur(byDay[dk]):'')+'">'+d.getDate()+'</button>';
+        cells+='<button class="cd'+(d.getMonth()!==calM?' out':'')+(byDay[dk]?' has':'')+(dk===todayK?' today':'')+(dk===selDay?' pick':'')+'" data-cd="'+dk+'" aria-label="'+dayLabel(d.getTime())+(byDay[dk]?', '+dur(byDay[dk]):'')+'">'+d.getDate()+'</button>';
       }
       rows+='<div class="wk'+(isoWeek(ws)%2?' alt':'')+(key===selW?' sel':'')+'" data-cw="'+key+'">'+cells+'</div>';
       var nx=new Date(ws);nx.setDate(nx.getDate()+7);ws=nx.getTime();
@@ -363,15 +367,16 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
     var now=new Date(),notCur=calY!==now.getFullYear()||calM!==now.getMonth();
     $('cal').innerHTML='<div class="cal"><div class="calhead"><button class="calnav" data-nav="-1" aria-label="Poprzedni miesiąc">‹</button><div class="mn">'+MONN[calM]+' '+calY+'</div><button class="calnav" data-nav="1" aria-label="Następny miesiąc">›</button></div>'+
       '<div class="dow">'+DOW.map(function(x){return '<span>'+x+'</span>'}).join('')+'</div>'+rows+
-      '<div class="calfoot"><span>'+sum+'</span>'+(notCur?'<button class="caltoday" data-today="1">Dziś</button>':'')+'</div></div>';
+      '<div class="calfoot"><span>'+sum+'</span>'+(notCur?'<button class="caltoday" data-today="1">Dziś</button>':'')+'</div></div><button class="addbtn" data-add="1">+ Dodaj czas pracy ręcznie</button>';
   }
   $('cal').addEventListener('click',function(e){
+    if(e.target.closest('[data-add]')){openEdit(null);return}
     var nav=e.target.closest('[data-nav]');
     if(nav){calM+=+nav.dataset.nav;if(calM<0){calM=11;calY--}if(calM>11){calM=0;calY++}renderS();return}
     if(e.target.closest('[data-today]')){var n=new Date();calY=n.getFullYear();calM=n.getMonth();selW=dkey(sow(Date.now()));openW[selW]=1;renderS();return}
     var row=e.target.closest('[data-cw]');if(!row)return;
     selW=row.dataset.cw;openW[selW]=1;
-    var day=e.target.closest('.cd.has');if(day)openD[day.dataset.cd]=1;
+    var day=e.target.closest('.cd');if(day){selDay=day.dataset.cd;if(day.classList.contains('has'))openD[selDay]=1}
     var hasData=group().some(function(w){return w.key===selW});
     renderS();
     if(hasData){var el=document.querySelector('[data-wcard="'+selW+'"]');if(el)el.scrollIntoView({block:'nearest',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}
@@ -398,40 +403,46 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
     T={status:'idle',segments:[]};saveT();closeOverlay();renderT();toast('Zapisano: '+title);
   }
   function openEdit(id){
-    var s=S.filter(function(x){return x.id===id})[0];if(!s)return;
-    var multi=s.segments.length>1,armed=false;
-    $('overlay').innerHTML='<div class="scrim" id="scrimEd"><div class="modal edit" role="dialog" aria-label="Edytuj sesję"><h2>Edytuj sesję</h2><div class="sub">'+dayLabel(sStart(s))+'</div>'+
-      '<label for="eT">TYTUŁ</label><input id="eT" maxlength="120" value="'+esc(s.title)+'">'+
-      '<div class="two"><div><label for="eF">OD</label><input id="eF" value="'+hm(sStart(s))+'" inputmode="numeric" maxlength="5"></div><div><label for="eTo">DO</label><input id="eTo" value="'+hm(sEnd(s))+'" inputmode="numeric" maxlength="5"></div></div>'+
-      '<div class="pv" id="ePv"></div>'+(multi?'<div class="hint">Zmiana godzin zastąpi zapisane pauzy jednym ciągłym odcinkiem. Zmiana samego tytułu zachowa pauzy.</div>':'')+
-      '<div class="err" id="eErr"></div><div class="acts"><button class="gh del" id="eDel">Usuń</button><span class="sp"></span><button class="gh" id="eCan">Anuluj</button><button class="pri" id="eSave">Zapisz</button></div></div></div>';
+    var isNew=(id===null||id===undefined),s=isNew?null:S.filter(function(x){return x.id===id})[0];
+    if(!isNew&&!s)return;
+    var d0=isNew?(selDay||dkey(Date.now())):dkey(sStart(s));
+    var multi=!isNew&&s.segments.length>1,armed=false,ttl=isNew?'Dodaj czas pracy':'Edytuj sesję';
+    $('overlay').innerHTML='<div class="scrim" id="scrimEd"><div class="modal edit" role="dialog" aria-label="'+ttl+'"><h2>'+ttl+'</h2><div class="sub" style="text-transform:none">'+(isNew?'Wpisz zadanie, dzień i godziny pracy. Możesz wybrać także dzień z przeszłości.':dayLabel(sStart(s)))+'</div>'+
+      '<label for="eT">ZADANIE</label><input id="eT" maxlength="120" placeholder="np. Korekta rozdziału" value="'+(isNew?'':esc(s.title))+'">'+
+      '<label for="eD">DATA</label><input id="eD" type="date" value="'+d0+'">'+
+      '<div class="two"><div><label for="eF">OD</label><input id="eF" value="'+(isNew?'':hm(sStart(s)))+'" placeholder="10:00" inputmode="numeric" maxlength="5"></div><div><label for="eTo">DO</label><input id="eTo" value="'+(isNew?'':hm(sEnd(s)))+'" placeholder="12:30" inputmode="numeric" maxlength="5"></div></div>'+
+      '<div class="pv" id="ePv"></div>'+(multi?'<div class="hint">Zmiana daty lub godzin zastąpi zapisane pauzy jednym ciągłym odcinkiem. Zmiana samego tytułu zachowa pauzy.</div>':'')+
+      '<div class="err" id="eErr"></div><div class="acts">'+(isNew?'':'<button class="gh del" id="eDel">Usuń</button>')+'<span class="sp"></span><button class="gh" id="eCan">Anuluj</button><button class="pri" id="eSave">'+(isNew?'Dodaj':'Zapisz')+'</button></div></div></div>';
     function calc(){
-      var f=parseHM($('eF').value),t=parseHM($('eTo').value);if(!f||!t)return null;
-      var b=sod(sStart(s)),a=at(b,f.h,f.m),z=at(b,t.h,t.m);if(z<=a)z+=864e5;return{a:a,z:z};
+      var dv=$('eD').value,f=parseHM($('eF').value),t=parseHM($('eTo').value);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(dv)||!f||!t)return null;
+      var b=keyToTs(dv),a=at(b,f.h,f.m),z=at(b,t.h,t.m);if(z<=a)z+=864e5;return{a:a,z:z};
     }
-    function pv(){var c=calc();$('ePv').textContent=c?'Czas trwania: '+dur(c.z-c.a):''}
-    $('eF').addEventListener('input',pv);$('eTo').addEventListener('input',pv);pv();
+    function pv(){var c=calc();$('ePv').textContent=c?cap(dayLabel(c.a))+' · '+dur(c.z-c.a):''}
+    ['eF','eTo','eD'].forEach(function(i){$(i).addEventListener('input',pv);$(i).addEventListener('change',pv)});pv();
     $('eCan').addEventListener('click',closeOverlay);
     $('scrimEd').addEventListener('mousedown',function(e){if(e.target.id==='scrimEd')closeOverlay()});
-    $('eDel').addEventListener('click',function(){
+    if(!isNew)$('eDel').addEventListener('click',function(){
       if(!armed){armed=true;this.textContent='Na pewno usunąć?';return}
       S=S.filter(function(x){return x.id!==id});saveS();closeOverlay();renderS();toast('Sesja usunięta');
     });
     $('eSave').addEventListener('click',function(){
-      var c=calc();if(!c){$('eErr').textContent='Podaj godziny w formacie GG:MM, np. 10:30.';return}
+      var c=calc();if(!c){$('eErr').textContent='Uzupełnij datę oraz godziny w formacie GG:MM, np. 10:30.';return}
       if(c.z-c.a>864e5){$('eErr').textContent='Sesja nie może trwać dłużej niż 24 h.';return}
       var title=$('eT').value.trim()||'Bez tytułu';
-      if(c.a!==sStart(s)||c.z!==sEnd(s))s.segments=[{start:c.a,end:c.z}];
-      s.title=title;s.demo=s.demo&&false?true:s.demo;saveS();closeOverlay();renderS();toast('Zapisano zmiany');
+      if(isNew){S.push({id:nextId(),title:title,segments:[{start:c.a,end:c.z}]})}
+      else{if(c.a!==sStart(s)||c.z!==sEnd(s))s.segments=[{start:c.a,end:c.z}];s.title=title}
+      var ws=sow(c.a);selW=dkey(ws);openW[selW]=1;openD[dkey(c.a)]=1;selDay=dkey(c.a);showWeekMonth(ws);
+      saveS();closeOverlay();renderS();toast(isNew?'Dodano sesję':'Zapisano zmiany');
     });
   }
 
   /* ---------- raport (kopiowanie) ---------- */
   function reportText(){
-    var weeks=group(),tot=0,L=['eSPe – raport czasu pracy','Stawka '+RATE+' zł/h · cel tygodniowy 6 h',''];
+    var weeks=group(),tot=0,L=['eSPe – raport czasu pracy','Stawka '+RATE+' zł/h',''];
     weeks.forEach(function(w){
-      tot+=w.tot;var g=goal(w.tot);
-      L.push('Tydzień '+weekTitle(w.ws)+' – '+dur(w.tot)+' · '+pln(earn(w.tot))+' · '+g.label);
+      tot+=w.tot;
+      L.push('Tydzień '+weekTitle(w.ws)+' – '+dur(w.tot)+' · '+pln(earn(w.tot)));
       w.dayList.forEach(function(d){
         L.push('  '+dayLabel(d.ds)+' – '+dur(d.tot));
         d.list.forEach(function(s){
@@ -459,14 +470,14 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
     var tot=0;
     weeks=weeks.slice().sort(function(a,b){return a.ws-b.ws});
     var ws=weeks.map(function(w){
-      tot+=w.tot;var g=goal(w.tot);
-      return{title:weekTitle(w.ws),total:dur(w.tot),earn:pln(earn(w.tot)),goal:(hide&&hide(w))?null:{text:g.label,ok:g.ok},
+      tot+=w.tot;
+      return{title:weekTitle(w.ws),total:dur(w.tot),earn:pln(earn(w.tot)),goal:null,
         days:w.dayList.slice().reverse().map(function(d){return{title:cap(dayLabel(d.ds)),total:dur(d.tot),
           sessions:d.list.map(function(s){return{time:hm(sStart(s))+' – '+hm(sEnd(s)),title:s.title,dur:dur(sDur(s)),
             pauses:pauses(s).map(function(p){return 'pauza '+hm(p.from)+' – wznowiono '+hm(p.to)+' ('+dur(p.to-p.from)+')'})}})}})};
     });
     var n=new Date();
-    return{title:'Raport czasu pracy',subtitle:scope+'  ·  stawka '+RATE+' zł/h  ·  cel 6 h tygodniowo',date:pad(n.getDate())+'.'+pad(n.getMonth()+1)+'.'+n.getFullYear(),weeks:ws,total:dur(tot),earn:pln(earn(tot))};
+    return{title:'Raport czasu pracy',subtitle:scope+'  ·  stawka '+RATE+' zł/h',date:pad(n.getDate())+'.'+pad(n.getMonth()+1)+'.'+n.getFullYear(),weeks:ws,total:dur(tot),earn:pln(earn(tot))};
   }
   function scopeData(kind){
     var all=group();
@@ -539,7 +550,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
     r.readAsText(f);
   });
 
-  var tt;function toast(m){var d=document.createElement('div');d.className='toast';d.setAttribute('role','status');d.textContent=m;document.body.appendChild(d);clearTimeout(tt);tt=setTimeout(function(){d.remove()},2200)}
+  var tt;function toast(m){var o=document.querySelector('.toast');if(o)o.remove();var d=document.createElement('div');d.className='toast';d.setAttribute('role','status');d.textContent=m;document.body.appendChild(d);clearTimeout(tt);tt=setTimeout(function(){d.remove()},2200)}
 
   $('bPlay').addEventListener('click',play);
   $('bPause').addEventListener('click',pause);

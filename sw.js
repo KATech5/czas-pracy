@@ -1,6 +1,6 @@
 /* Service worker: aplikacja działa bez internetu.
    Zmieniając pliki aplikacji, podnieś numer wersji poniżej, żeby telefon pobrał nowe pliki. */
-var VERSION = 'espe-v2';
+var VERSION = 'espe-v3';
 var FILES = [
   './', 'index.html', 'manifest.webmanifest', 'pdf.js',
   'logo.png', 'circle.png', 'book.png',
