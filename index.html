@@ -107,6 +107,13 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 .sess .ed{display:block;text-align:right;color:var(--muted);font-size:11.5px;margin-top:4px}
 .empty{margin:36px 12px;text-align:center;line-height:1.6}
 
+/* ---------- Kopia zapasowa ---------- */
+.bak{display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--inset);border:1.5px solid var(--wine);border-radius:14px;padding:10px 12px;margin-bottom:14px;font-size:13px;line-height:1.4}
+.bak button{flex:none;background:var(--wine);color:var(--onwine);border-radius:10px;padding:8px 12px;font-weight:800}
+.bak.ok{border:1px dashed var(--beige);color:var(--muted);justify-content:center;text-align:center}
+.bakhint{display:block;margin:0 auto 10px;color:var(--wine);font-weight:800;text-decoration:underline;padding:6px 10px}
+:root[data-theme="dark"] .bakhint{color:var(--sky)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .bakhint{color:var(--sky)}}
 /* ---------- Eksport ---------- */
 .opts{display:grid;gap:8px;margin-top:12px}
 .opt{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;width:100%;background:var(--inset);border:1.5px solid var(--beige);border-radius:14px;padding:12px 14px}
@@ -205,6 +212,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
       </div>
     </div>
     <div class="status" id="status"></div>
+    <button class="bakhint" id="bBakHint" hidden>Zrób kopię zapasową danych</button>
     <button class="statsbtn" id="bStats">STATYSTYKI</button>
   </section>
 
@@ -216,6 +224,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
       <button class="copy" id="bCopy" aria-label="Eksportuj raport">PDF</button>
     </div>
     <div class="rules">Cel: 6 h tygodniowo · stawka 33 zł/h</div>
+    <div id="bakBanner"></div>
     <div id="cal"></div>
     <div id="demoNote"></div>
     <div id="weeks" class="weeks"></div>
@@ -223,16 +232,46 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 </div>
 
 <div id="overlay"></div>
-<input type="file" id="fileIn" accept=".json,application/json" hidden>
+<input type="file" id="fileIn" accept=".json,.txt,application/json,text/plain" hidden>
 <script src="pdf.js"></script>
 <script>
 (function(){
   var RATE=33, GOAL=6*3600000;
-  var KT='espe.timer.v1', KS='espe.sessions.v1';
+  var KT='espe.timer.v1', KS='espe.sessions.v1', KB='espe.lastbackup.v1';
   var mem={};
-  function ld(k){try{var v=localStorage.getItem(k);return v?JSON.parse(v):null}catch(e){return mem[k]||null}}
+  /* Odczyt: wartość albo null. Gdy zapis jest uszkodzony, jego surowa treść jest odkładana
+     pod kluczem "espe.corrupt.*" (nic nie jest tracone), a aplikacja NIE nadpisuje go pustymi danymi. */
+  function ld(k){
+    var raw=null;
+    try{raw=localStorage.getItem(k);if(raw===null)return mem[k]===undefined?null:mem[k];return JSON.parse(raw)}
+    catch(e){try{if(raw)localStorage.setItem('espe.corrupt.'+k+'.'+Date.now(),raw)}catch(e2){}return mem[k]===undefined?null:mem[k]}
+  }
   function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){mem[k]=v}}
-  function rm(k){try{localStorage.removeItem(k)}catch(e){delete mem[k]}}
+  function rm(k){try{localStorage.removeItem(k)}catch(e){}delete mem[k]}
+  /* Druga kopia w IndexedDB (osobny magazyn przeglądarki). */
+  var idbP=null;
+  function idbOpen(){
+    if(!idbP)idbP=new Promise(function(res,rej){try{var r=indexedDB.open('espe-timer',1);r.onupgradeneeded=function(){r.result.createObjectStore('kv')};r.onsuccess=function(){res(r.result)};r.onerror=function(){rej(r.error)}}catch(e){rej(e)}});
+    return idbP;
+  }
+  function idbGet(k){return idbOpen().then(function(db){return new Promise(function(res,rej){var q=db.transaction('kv').objectStore('kv').get(k);q.onsuccess=function(){res(q.result===undefined?null:q.result)};q.onerror=function(){rej(q.error)}})})}
+  function idbSet(k,v){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);tx.oncomplete=function(){res()};tx.onerror=function(){rej(tx.error)};tx.onabort=function(){rej(tx.error)}})})}
+  function norm(raw){if(!raw)return null;if(Array.isArray(raw))return{t:0,sessions:raw};if(Array.isArray(raw.sessions))return{t:+raw.t||0,sessions:raw.sessions};return null}
+  function cleanSessions(arr){
+    var out=[],bad=0,used={};
+    arr.forEach(function(x){
+      var ok=x&&typeof x.title==='string'&&Array.isArray(x.segments)&&x.segments.length&&x.segments.every(function(g){return g&&typeof g.start==='number'&&typeof g.end==='number'&&g.end>g.start});
+      if(!ok){bad++;return}
+      var id=typeof x.id==='number'&&!used[x.id]?x.id:null;
+      out.push({id:id,title:x.title,segments:x.segments.map(function(g){return{start:g.start,end:g.end}})});
+      if(id!==null)used[id]=1;
+    });
+    var next=out.reduce(function(m,x){return Math.max(m,x.id||0)},0)+1;
+    out.forEach(function(x){if(x.id===null)x.id=next++});
+    if(bad){try{localStorage.setItem('espe.dropped.'+Date.now(),JSON.stringify(arr))}catch(e){}}
+    return out;
+  }
+  var lastBak=+(ld(KB)||0);
 
   /* ---------- czas ---------- */
   var DAYS=['niedziela','poniedziałek','wtorek','środa','czwartek','piątek','sobota'];
@@ -258,9 +297,9 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
   function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 
   /* ---------- logika timera (timestampy) ---------- */
-  var T=ld(KT)||{status:'idle',segments:[]};
-  if(!T||!Array.isArray(T.segments)||['idle','running','paused','finishing'].indexOf(T.status)<0)T={status:'idle',segments:[]};
-  function saveT(){T.status==='idle'?rm(KT):sv(KT,T)}
+  function sanT(x){var idle={status:'idle',segments:[]};try{if(!x||!Array.isArray(x.segments)||['idle','running','paused','finishing'].indexOf(x.status)<0)return idle;return x}catch(e){return idle}}
+  var T=sanT(ld(KT));
+  function saveT(){if(T.status==='idle'){rm(KT);idbSet(KT,null).catch(function(){})}else{sv(KT,T);idbSet(KT,T).catch(function(){})}}
   function elapsed(now){var t=0;T.segments.forEach(function(s){t+=Math.max(0,(s.end==null?now:s.end)-s.start)});return t}
   function closeOpen(now){T.segments=T.segments.map(function(s){return s.end==null?{start:s.start,end:Math.max(now,s.start)}:s})}
   function play(){if(T.status==='running'||T.status==='finishing')return;var now=Date.now(),last=T.segments.length?T.segments[T.segments.length-1].end:now;T.segments.push({start:Math.max(now,last==null?now:last),end:null});T.status='running';saveT();renderT()}
@@ -269,9 +308,9 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
   function cancelFinish(){if(T.status!=='finishing')return;T.status='paused';saveT();closeOverlay();renderT()}
 
   /* ---------- sesje ---------- */
-  var S=ld(KS);
-  if(!Array.isArray(S)){S=[];sv(KS,S)}
-  function saveS(){sv(KS,S)}
+  var lsEnv=norm(ld(KS)),S=lsEnv?cleanSessions(lsEnv.sessions):[];
+  /* Brak odczytu NIE kończy się zapisem pustej listy. Zapis następuje tylko po realnej zmianie. */
+  function saveS(){var env={v:2,t:Date.now(),sessions:S};sv(KS,env);lsEnv={t:env.t,sessions:S};idbSet(KS,env).catch(function(){})}
   function sStart(s){return s.segments[0].start}
   function sEnd(s){return s.segments[s.segments.length-1].end}
   function sDur(s){return s.segments.reduce(function(a,x){return a+Math.max(0,x.end-x.start)},0)}
@@ -299,6 +338,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
     var run=T.status==='running',idle=T.status==='idle';
     $('clock').textContent=clock(elapsed(Date.now()));
     $('bPause').disabled=!run;$('bPlay').disabled=run||T.status==='finishing';$('bStop').disabled=idle;
+    $('bBakHint').hidden=!bakOverdue();
     var st=$('status');
     if(run)st.textContent='Praca trwa od '+hm(T.segments[0].start);
     else if(T.status==='paused'||T.status==='finishing')st.textContent='Pauza od '+hm(T.segments[T.segments.length-1].end);
@@ -315,6 +355,7 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
     if(firstRender&&weeks.length){var cur=weeks.filter(function(w){return w.ws===sow(Date.now())})[0]||weeks[0];openW[cur.key]=1;if(cur.dayList[0])openD[cur.dayList[0].key]=1}
     firstRender=false;
     renderCal(weeks);
+    renderBak();
     var hasDemo=S.some(function(s){return s.demo});
     $('demoNote').innerHTML=hasDemo?'<div class="demo"><span>Widoczne są przykładowe sesje. Twoje własne dodadzą się obok.</span><button id="bClearDemo">Usuń przykłady</button></div>':'';
     var box=$('weeks');
@@ -519,12 +560,13 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
       '<button class="opt" data-x="month"><b>Cały miesiąc</b><span>'+MONN[calM]+' '+calY+'</span></button>'+
       '<button class="opt" data-x="all"><b>Wszystkie sesje</b><span>od początku</span></button></div>'+
       '<div class="more"><button class="gh" id="xText">Kopiuj jako tekst</button><button class="gh" id="xBak">Zapisz kopię danych</button><button class="gh" id="xRes">Wczytaj kopię</button></div>'+
-      '<div class="acts"><span class="sp"></span><button class="gh" id="xClose">Zamknij</button></div></div></div>';
+      '<div class="hint" id="xPersist"></div><div class="acts"><span class="sp"></span><button class="gh" id="xClose">Zamknij</button></div></div></div>';
+    try{navigator.storage.persisted().then(function(ok){var el=$('xPersist');if(el)el.textContent=ok?'Pamięć aplikacji jest chroniona przed automatycznym czyszczeniem.':'Pamięć aplikacji nie jest chroniona, telefon może ją czasem wyczyścić. Rób kopie danych.'})}catch(e){}
     $('scrimX').addEventListener('click',function(e){
       var o=e.target.closest('[data-x]');if(o&&!o.disabled){doExport(o.dataset.x);return}
       if(e.target.id==='scrimX'||e.target.id==='xClose')closeOverlay();
       else if(e.target.id==='xText')copyReport();
-      else if(e.target.id==='xBak'){saveFile(new Blob([JSON.stringify({app:'espe-timer',v:1,sessions:S})],{type:'application/json'}),'kopia-czasu-pracy-'+dkey(Date.now())+'.json');closeOverlay()}
+      else if(e.target.id==='xBak'){closeOverlay();makeBackup()}
       else if(e.target.id==='xRes')$('fileIn').click();
     });
   }
@@ -550,6 +592,41 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
     r.readAsText(f);
   });
 
+  function ago(ts){var d=Math.floor((sod(Date.now())-sod(ts))/864e5);return d<=0?'dzisiaj':d===1?'wczoraj':d+' dni temu'}
+  function bakOverdue(){return S.length>0&&(!lastBak||Date.now()-lastBak>7*864e5)}
+  function renderBak(){
+    var el=$('bakBanner');if(!el)return;
+    if(!S.length){el.innerHTML='';return}
+    el.innerHTML=bakOverdue()
+      ?'<div class="bak"><span>'+(lastBak?'Ostatnia kopia danych: '+ago(lastBak)+'.':'Nie robiono jeszcze kopii danych.')+' Zrób ją, żeby nie stracić sesji.</span><button data-bak="1">Zrób kopię</button></div>'
+      :'<div class="bak ok">Ostatnia kopia danych: '+ago(lastBak)+'</div>';
+  }
+  function markBackup(){lastBak=Date.now();sv(KB,lastBak);idbSet(KB,lastBak).catch(function(){});renderT();renderBak()}
+  /* Kopia jako plik .txt (przeglądarka pozwala go udostępnić): Gmail, Dysk Google, WhatsApp itd. */
+  function makeBackup(){
+    var name='kopia-czasu-pracy-'+dkey(Date.now())+'.txt',blob=new Blob([JSON.stringify({app:'espe-timer',v:2,exportedAt:Date.now(),sessions:S})],{type:'text/plain'}),f=null;
+    try{f=new File([blob],name,{type:'text/plain'})}catch(e){}
+    if(f&&navigator.canShare&&navigator.canShare({files:[f]})){
+      return navigator.share({files:[f],title:'Kopia danych – czas pracy',text:'Kopia zapasowa sesji z aplikacji czasu pracy'})
+        .then(markBackup).catch(function(e){if(!e||e.name!=='AbortError'){saveFile(blob,name);markBackup()}});
+    }
+    saveFile(blob,name);markBackup();return Promise.resolve();
+  }
+  /* Po starcie porównuje główny zapis z kopią w IndexedDB i odtwarza brakujące dane. */
+  function reconcile(){
+    idbGet(KS).then(function(raw){
+      var ib=norm(raw);
+      if(ib&&(!lsEnv||ib.t>lsEnv.t)){
+        S=cleanSessions(ib.sessions);sv(KS,{v:2,t:ib.t,sessions:S});lsEnv={t:ib.t,sessions:S};
+        if(!vs.hidden)renderS();renderT();
+        if(S.length)toast('Przywrócono sesje z kopii w pamięci telefonu: '+S.length);
+      }else if(lsEnv&&(!ib||lsEnv.t>ib.t)){idbSet(KS,{v:2,t:lsEnv.t,sessions:lsEnv.sessions}).catch(function(){})}
+    }).catch(function(){});
+    idbGet(KT).then(function(t){
+      if(T.status==='idle'&&ld(KT)===null&&t){var r=sanT(t);if(r.status!=='idle'){T=r;saveT();renderT();if(T.status==='finishing')openSave();toast('Przywrócono trwający pomiar czasu')}}
+    }).catch(function(){});
+    idbGet(KB).then(function(v){if(v&&+v>lastBak){lastBak=+v;sv(KB,lastBak);renderT();renderBak()}}).catch(function(){});
+  }
   var tt;function toast(m){var o=document.querySelector('.toast');if(o)o.remove();var d=document.createElement('div');d.className='toast';d.setAttribute('role','status');d.textContent=m;document.body.appendChild(d);clearTimeout(tt);tt=setTimeout(function(){d.remove()},2200)}
 
   $('bPlay').addEventListener('click',play);
@@ -561,6 +638,9 @@ button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid
 
   renderT();
   if(T.status==='finishing')openSave();
+  reconcile();
+  $('bBakHint').addEventListener('click',makeBackup);
+  $('bakBanner').addEventListener('click',function(e){if(e.target.closest('[data-bak]'))makeBackup()});
   try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist()}catch(e){}
   try{if('serviceWorker' in navigator)window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}catch(e){}
   if(location.hash==='#statystyki')show('stats');
